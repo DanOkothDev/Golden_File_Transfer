@@ -1,190 +1,196 @@
-from flask import Flask, request, render_template_string, send_from_directory, send_file
-import os, zipfile, io
+import os
+import socket
+import zipfile
+import qrcode
+from flask import Flask, request, render_template_string, send_from_directory
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
-# 🔑 Save uploads directly into Desktop/uploads
+# Save files to Desktop/uploads
 DESKTOP = os.path.join(os.path.expanduser("~"), "Desktop")
 UPLOAD_FOLDER = os.path.join(DESKTOP, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Main HTML with gold styling
-HTML_PAGE = """
+# --- Get local IP ---
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
+
+LOCAL_IP = get_local_ip()
+
+# --- Generate QR Code for URL ---
+SERVER_URL = f"http://{LOCAL_IP}:5000"
+QR_PATH = os.path.join(UPLOAD_FOLDER, "server_qr.png")
+
+if not os.path.exists(QR_PATH):
+    qr = qrcode.make(SERVER_URL)
+    qr.save(QR_PATH)
+
+# --- HTML Templates ---
+HOME_PAGE = """
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phone ↔ PC File Transfer</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #fafafa; padding:20px; color:#333; }
-        .container { max-width: 700px; margin: auto; }
-        h1 { text-align:center; color: #b8860b; margin-bottom:30px; font-size: 2em; }
-        .card {
-            background: white; padding: 25px; margin-bottom: 25px;
-            border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        h2 { margin-top:0; color:#444; font-size:1.3em; }
-        .custom-file {
-            display: inline-block;
-            background: #b8860b;
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-            margin-top: 10px;
-            margin-bottom: 10px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-            transition: background 0.3s, transform 0.2s;
-        }
-        .custom-file:hover {
-            background: #daa520;
-            transform: scale(1.05);
-        }
-        .custom-file input[type="file"] { display: none; } /* hide ugly default */
-        button {
-            margin-top: 10px; padding: 10px 18px;
-            background: #333; color:white; border:none;
-            border-radius: 6px; cursor:pointer;
-            font-size: 0.95em;
-        }
-        button:hover { background: #555; }
-        ul { list-style:none; padding:0; }
-        li {
-            margin:8px 0; padding:10px;
-            border:1px solid #eee;
-            border-radius:8px;
-            background:#fff8dc;
-        }
-        a { text-decoration:none; color:#b8860b; font-weight:500; }
-        a:hover { text-decoration:underline; color:#daa520; }
-    </style>
+  <title>Golden Drop 🚀</title>
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a1a; color: gold; text-align: center; margin: 0; }
+    h1 { font-size: 2.5em; margin-top: 30px; }
+    h2 { font-size: 1.8em; margin-bottom: 15px; }
+    .card { background: #2a2a2a; padding: 40px; margin: 30px auto; border-radius: 20px; width: 70%; max-width: 600px; box-shadow: 0 0 20px rgba(255,215,0,0.4); }
+    input[type=file] { margin: 15px 0; font-size: 1.1em; color: white; }
+    button, input[type=submit], a.button {
+      display: inline-block;
+      background: linear-gradient(45deg, gold, #ffcc00);
+      border: none;
+      padding: 14px 30px;
+      margin: 12px;
+      font-size: 1.1em;
+      border-radius: 12px;
+      cursor: pointer;
+      color: black;
+      font-weight: bold;
+      text-decoration: none;
+      transition: all 0.3s ease-in-out;
+    }
+    button:hover, input[type=submit]:hover, a.button:hover {
+      background: linear-gradient(45deg, #ffdb4d, gold);
+      transform: scale(1.05);
+      box-shadow: 0 0 10px gold;
+    }
+    img.qr { margin: 15px; border: 4px solid gold; border-radius: 12px; }
+    small { display: block; margin-top: 10px; font-size: 1em; color: #ffdb4d; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>📡 Phone ↔ PC Transfer</h1>
+  <h1>✨ Golden Drop ✨</h1>
+  
+  <div class="card">
+    <h2>📱 Connect Your Phone</h2>
+    <p>Scan this QR with your phone camera:</p>
+    <img src="/qr" width="250" class="qr"><br>
+    <small>{{server_url}}</small>
+  </div>
 
-        <div class="card">
-            <h2>📤 Upload Files (Multiple)</h2>
-            <form method="POST" enctype="multipart/form-data" action="/upload">
-                <label class="custom-file">
-                    <input type="file" name="files" multiple>
-                    ✨ Choose Files
-                </label><br>
-                <button type="submit">Upload Files</button>
-            </form>
-        </div>
+  <div class="card">
+    <h2>⬆️ Upload Files</h2>
+    <form method="POST" action="/upload" enctype="multipart/form-data">
+      <input type="file" name="files" multiple>
+      <br>
+      <input type="submit" value="Upload Files">
+    </form>
+    
+    <h2>⬆️ Upload Folder (as Zip)</h2>
+    <form method="POST" action="/upload_zip" enctype="multipart/form-data">
+      <input type="file" name="zipfile" accept=".zip">
+      <br>
+      <input type="submit" value="Upload Zip">
+    </form>
+  </div>
 
-        <div class="card">
-            <h2>📂 Upload Folder (as .zip)</h2>
-            <form method="POST" enctype="multipart/form-data" action="/upload_zip">
-                <label class="custom-file">
-                    <input type="file" name="zipfile" accept=".zip">
-                    📁 Choose Zip
-                </label><br>
-                <button type="submit">Upload & Extract</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>📥 Download (PC → Phone)</h2>
-            <ul>
-                {% for file in files %}
-                    <li><a href="/download/{{ file }}">{{ file }}</a></li>
-                {% endfor %}
-            </ul>
-            <form method="GET" action="/download_all">
-                <button type="submit">⬇ Download All as Zip</button>
-            </form>
-        </div>
-    </div>
+  <div class="card">
+    <h2>⬇️ Download Files</h2>
+    <a class="button" href="/files">Browse Files</a>
+  </div>
 </body>
 </html>
 """
 
-# Success page
+FILES_PAGE = """
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Golden Drop Files</title>
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a1a; color: gold; text-align: center; }
+    h1 { margin-top: 30px; font-size: 2.2em; }
+    ul { list-style: none; padding: 0; }
+    li { margin: 12px 0; font-size: 1.2em; }
+    a { color: gold; text-decoration: none; font-weight: bold; }
+    a:hover { text-decoration: underline; }
+    .back { display: inline-block; margin-top: 20px; background: linear-gradient(45deg, gold, #ffcc00); padding: 12px 25px; border-radius: 12px; color: black; font-weight: bold; text-decoration: none; }
+    .back:hover { background: linear-gradient(45deg, #ffdb4d, gold); transform: scale(1.05); box-shadow: 0 0 10px gold; }
+  </style>
+</head>
+<body>
+  <h1>📂 Files in Uploads</h1>
+  <ul>
+    {% for f in files %}
+      <li><a href="/download/{{f}}" download>{{f}}</a></li>
+    {% endfor %}
+  </ul>
+  <a href="/" class="back">⬅ Back Home</a>
+</body>
+</html>
+"""
+
 SUCCESS_PAGE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Upload Success</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; background:#fafafa; }
-        .success {
-            max-width: 500px; margin: 80px auto; background: white;
-            padding: 30px; border-radius: 15px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        h2 { color: #b8860b; }
-        a {
-            display:inline-block; margin-top:20px; text-decoration:none;
-            color:white; background:#b8860b; padding:10px 20px;
-            border-radius:8px;
-        }
-        a:hover { background:#daa520; }
-    </style>
+  <title>Upload Success</title>
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a1a; color: gold; text-align: center; }
+    h1 { margin-top: 40px; font-size: 2em; }
+    a { display: inline-block; margin-top: 25px; background: linear-gradient(45deg, gold, #ffcc00); padding: 12px 25px; border-radius: 12px; color: black; font-weight: bold; text-decoration: none; }
+    a:hover { background: linear-gradient(45deg, #ffdb4d, gold); transform: scale(1.05); box-shadow: 0 0 10px gold; }
+  </style>
 </head>
 <body>
-    <div class="success">
-        <h2>✅ Upload Successful</h2>
-        <p>{{ message }}</p>
-        <a href="/">⬅ Go Back</a>
-    </div>
+  <h1>✅ {{message}}</h1>
+  <a href="/">⬅ Back Home</a>
 </body>
 </html>
 """
 
+# --- Routes ---
 @app.route('/')
 def index():
-    files = os.listdir(UPLOAD_FOLDER)
-    return render_template_string(HTML_PAGE, files=files)
+    return render_template_string(HOME_PAGE, server_url=SERVER_URL)
+
+@app.route('/qr')
+def qr():
+    return send_from_directory(UPLOAD_FOLDER, "server_qr.png")
 
 @app.route('/upload', methods=['POST'])
 def upload_files():
     uploaded_files = request.files.getlist("files")
-    saved_files = []
+    saved = []
     for file in uploaded_files:
         if file.filename:
-            filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-            file.save(filepath)
-            saved_files.append(file.filename)
-    return render_template_string(SUCCESS_PAGE, message=f"{len(saved_files)} files saved to Desktop/uploads")
+            filename = secure_filename(file.filename)
+            save_path = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(save_path)
+            saved.append(filename)
+    return render_template_string(SUCCESS_PAGE, message=f"Uploaded {len(saved)} file(s)")
 
 @app.route('/upload_zip', methods=['POST'])
 def upload_zip():
-    if 'zipfile' not in request.files:
-        return "No zip file uploaded"
-
-    zip_file = request.files['zipfile']
-    if zip_file.filename.endswith('.zip'):
-        zip_path = os.path.join(UPLOAD_FOLDER, zip_file.filename)
+    zip_file = request.files["zipfile"]
+    if zip_file.filename.endswith(".zip"):
+        zip_path = os.path.join(UPLOAD_FOLDER, secure_filename(zip_file.filename))
         zip_file.save(zip_path)
-
-        # Extract the zip into Desktop/uploads
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(UPLOAD_FOLDER)
+        os.remove(zip_path)
+        return render_template_string(SUCCESS_PAGE, message="Zip extracted successfully!")
+    return render_template_string(SUCCESS_PAGE, message="Invalid file type!")
 
-        os.remove(zip_path)  # delete the zip after extraction
-        return render_template_string(SUCCESS_PAGE, message=f"Zip extracted to Desktop/uploads")
-    return "Invalid file format"
+@app.route('/files')
+def list_files():
+    files = os.listdir(UPLOAD_FOLDER)
+    return render_template_string(FILES_PAGE, files=files)
 
 @app.route('/download/<filename>')
 def download_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
 
-@app.route('/download_all')
-def download_all():
-    memory_file = io.BytesIO()
-    with zipfile.ZipFile(memory_file, 'w') as zf:
-        for root, dirs, files in os.walk(UPLOAD_FOLDER):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, UPLOAD_FOLDER)  # keep folder structure
-                zf.write(file_path, arcname)
-    memory_file.seek(0)
-    return send_file(memory_file, download_name="all_files.zip", as_attachment=True)
-
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
