@@ -3,7 +3,7 @@ import os, zipfile, io
 
 app = Flask(__name__)
 
-# 🔑 Save uploads directly into Desktop/uploads
+# Save uploads directly into Desktop/uploads
 DESKTOP = os.path.join(os.path.expanduser("~"), "Desktop")
 UPLOAD_FOLDER = os.path.join(DESKTOP, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -63,10 +63,10 @@ HTML_PAGE = """
 </head>
 <body>
     <div class="container">
-        <h1>📡 Phone ↔ PC Transfer</h1>
+        <h1>Phone ↔ PC Transfer</h1>
 
         <div class="card">
-            <h2>📤 Upload Files (Multiple)</h2>
+            <h2>Upload Files (Multiple)</h2>
             <form method="POST" enctype="multipart/form-data" action="/upload">
                 <label class="custom-file">
                     <input type="file" name="files" multiple>
@@ -88,7 +88,7 @@ HTML_PAGE = """
         </div>
 
         <div class="card">
-            <h2>📥 Download (PC → Phone)</h2>
+            <h2>Download (PC → Phone)</h2>
             <ul>
                 {% for file in files %}
                     <li><a href="/download/{{ file }}">{{ file }}</a></li>
